@@ -1,12 +1,10 @@
 {
   description = "bevy flake";
-
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
-    flake-utils.url = "github.com/numtide/flake-utils";
+    flake-utils.url = "github:numtide/flake-utils";
   };
-
   outputs =
     {
       nixpkgs,
@@ -34,35 +32,35 @@
               ]
               ++ lib.optionals (lib.strings.hasInfix "linux" system) [
                 # for Linux
-                # Audio
+                # Audio (Linux only)
                 alsa-lib
                 # Cross Platform 3D Graphics API
                 vulkan-loader
                 # For debugging around vulkan
                 vulkan-tools
-                # Wayland support
-                wayland # <<< ADDED: wayland-client development files
                 # Other dependencies
                 libudev-zero
+                # X11 libraries
                 xorg.libX11
                 xorg.libXcursor
                 xorg.libXi
                 xorg.libXrandr
                 libxkbcommon
+                # Wayland libraries
+                wayland
+                wayland-protocols
+                libGL
               ];
-
-            # Set RUST_SRC_PATH for rust-analyzer
-            RUST_SRC_PATH = "${rust-bin.stable.latest.rust.src}/lib/rustlib/src/rust/library";
-
-            # Set LD_LIBRARY_PATH for dynamic linking
-            # Use `lib.makeLibraryPath` with all relevant dependencies
+            RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
             LD_LIBRARY_PATH = lib.makeLibraryPath [
               vulkan-loader
-              wayland
               xorg.libX11
               xorg.libXi
               xorg.libXcursor
+              xorg.libXrandr
               libxkbcommon
+              wayland
+              libGL
             ];
           };
       }
