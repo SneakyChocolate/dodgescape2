@@ -70,7 +70,7 @@ fn spawn_enemies(
 
 fn apply_velocity_system(
     time: Res<Time>,
-    mut query: Query<(&mut Transform, &Velocity)>,
+    query: Query<(&mut Transform, &Velocity)>,
 ) {
     let d = time.delta_secs();
     for (mut transform, velocity) in query {
@@ -79,8 +79,8 @@ fn apply_velocity_system(
 }
 
 fn enemy_kill_system(
-    mut players: Query<(&mut Alive, &Transform, &Radius), With<Player>>,
-    mut enemies: Query<(&Transform, &Radius), With<Enemy>>,
+    players: Query<(&mut Alive, &Transform, &Radius), With<Player>>,
+    enemies: Query<(&Transform, &Radius), With<Enemy>>,
 ) {
     for (mut player_alive, player_pos, player_radius) in players {
         for (enemy_pos, enemy_radius) in enemies {

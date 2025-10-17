@@ -5,8 +5,7 @@ fn main() {
         .insert_resource(CursorPos(Vec2::ZERO))
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Startup, spawn_enemies)
-        .add_systems(Update, (cursor_position_system, player_movement_system, apply_velocity_system, enemy_kill_system))
+        .add_systems(Update, (cursor_position_system, player_movement_system))
         .run();
 }
 
@@ -35,25 +34,8 @@ fn setup(
     ));
 }
 
-fn random_velocity() -> Vec2 {
-    let mut rng = rand::rng();
-    let angle = rng.random_range(0.0..std::f32::consts::TAU);
-    let speed = rng.random_range(50.0..200.0);
-    Vec2::from_angle(angle) * speed
-}
-
-fn random_position(range: f32) -> Vec2 {
-    let mut rng = rand::rng();
-    Vec2::new(
-        rng.random_range(-range..range),
-        rng.random_range(-range..range),
-    )
-}
-
-
 fn cursor_position_system(
     window: Single<&Window, With<PrimaryWindow>>,
-    mut cursor_moved_events: EventReader<CursorMoved>,
     mut cursor: ResMut<CursorPos>,
 ) {
     let window_center = Vec2::new(window.width() / 2.0, window.height() / 2.0);
@@ -65,7 +47,7 @@ fn cursor_position_system(
 
 fn player_movement_system(
     cursor: Res<CursorPos>,
-    mut query: Query<(&mut Velocity, &Alive), With<Player>>,
+    query: Query<(&mut Velocity, &Alive), With<Player>>,
 ) {
     for (mut velocity, alive) in query {
         if alive.0 {

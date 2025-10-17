@@ -66,7 +66,6 @@ fn spawn_enemies(
 
 fn cursor_position_system(
     window: Single<&Window, With<PrimaryWindow>>,
-    mut cursor_moved_events: EventReader<CursorMoved>,
     mut cursor: ResMut<CursorPos>,
 ) {
     let window_center = Vec2::new(window.width() / 2.0, window.height() / 2.0);
@@ -78,7 +77,7 @@ fn cursor_position_system(
 
 fn player_movement_system(
     cursor: Res<CursorPos>,
-    mut query: Query<(&mut Velocity, &Alive), With<Player>>,
+    query: Query<(&mut Velocity, &Alive), With<Player>>,
 ) {
     for (mut velocity, alive) in query {
         if alive.0 {
@@ -100,7 +99,7 @@ fn player_movement_system(
 
 fn apply_velocity_system(
     time: Res<Time>,
-    mut query: Query<(&mut Transform, &Velocity)>,
+    query: Query<(&mut Transform, &Velocity)>,
 ) {
     let d = time.delta_secs();
     for (mut transform, velocity) in query {
@@ -109,8 +108,8 @@ fn apply_velocity_system(
 }
 
 fn enemy_kill_system(
-    mut players: Query<(&mut Alive, &Transform, &Radius), With<Player>>,
-    mut enemies: Query<(&Transform, &Radius), With<Enemy>>,
+    players: Query<(&mut Alive, &Transform, &Radius), With<Player>>,
+    enemies: Query<(&Transform, &Radius), With<Enemy>>,
 ) {
     for (mut player_alive, player_pos, player_radius) in players {
         for (enemy_pos, enemy_radius) in enemies {
