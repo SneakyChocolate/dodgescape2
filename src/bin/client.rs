@@ -5,12 +5,14 @@ use dodgescrape2::*;
 #[derive(Resource)]
 pub struct ClientSocket {
     pub socket: UdpSocket,
+    pub buf: [u8; 1000],
 }
 
 impl ClientSocket {
 	pub fn new() -> Self {
 		Self {
 			socket: UdpSocket::bind("0.0.0.0:0").unwrap(),
+		    buf: [0; 1000],
 		}
 	}
 	pub fn send(&self, bytes: &[u8]) {
@@ -24,7 +26,7 @@ fn main() {
         .insert_resource(CursorPos(Vec2::ZERO))
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, (cursor_position_system, player_movement_system))
+        .add_systems(Update, (receive_messages, cursor_position_system, player_movement_system))
         .run();
 }
 
@@ -87,5 +89,26 @@ fn player_movement_system(
         else {
             velocity.0 = Vec2::ZERO;
         }
+    }
+}
+
+fn receive_messages(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut client_socket: ResMut<ClientSocket>,
+) {
+    let ClientSocket { socket, buf } = &mut *client_socket;
+
+    if let Ok((len, addr)) = socket.recv_from(buf) {
+    	let server_message_option = ServerMessage::decode(buf);
+    	match server_message_option {
+	        Some(server_message) => match server_message {
+	            ServerMessage::Ok => {
+	            	println!("player was created successfully");
+	            },
+	        },
+	        None => todo!(),
+	    }
     }
 }

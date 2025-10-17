@@ -1,23 +1,6 @@
-use std::net::UdpSocket;
+use std::net::{SocketAddr, UdpSocket};
 
 use dodgescrape2::*;
-
-#[derive(Resource)]
-pub struct ServerSocket {
-    pub socket: UdpSocket,
-    pub buf: [u8; 1500],
-}
-
-impl ServerSocket {
-    pub fn new(
-        socket: UdpSocket,
-    ) -> Self {
-        Self {
-            socket,
-            buf: [0; 1500],
-        }
-    }
-}
 
 fn main() {
     let socket = UdpSocket::bind("0.0.0.0:7878").unwrap();
@@ -26,8 +9,36 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .insert_resource(ServerSocket::new(socket))
         .add_systems(Startup, (setup, spawn_enemies))
-        .add_systems(Update, (receive_messages, apply_velocity_system, enemy_kill_system))
+        .add_systems(Update, (receive_messages, apply_velocity_system, enemy_kill_system, update_clients))
         .run();
+}
+
+#[derive(Component)]
+pub struct UpdateAddress {
+    addr: SocketAddr,
+}
+
+#[derive(Resource)]
+pub struct ServerSocket {
+    pub socket: UdpSocket,
+    pub buf: [u8; 1000],
+}
+
+impl ServerSocket {
+    pub fn new(
+        socket: UdpSocket,
+    ) -> Self {
+        Self {
+            socket,
+            buf: [0; 1000],
+        }
+    }
+    pub fn send_to(&self, bytes: &[u8], addr: SocketAddr) -> bool {
+        match self.socket.send_to(bytes, addr) {
+            Ok(l) => l == bytes.len(),
+            Err(_) => false,
+        }
+    }
 }
 
 fn receive_messages(
@@ -51,11 +62,22 @@ fn receive_messages(
                         Velocity(Vec2::new(0., 0.)),
                         Mesh2d(meshes.add(Circle::new(20.))),
                         MeshMaterial2d(materials.add(Color::srgb(0., 1., 0.))),
+                        UpdateAddress {addr},
                     ));
                 },
             },
             None => todo!(),
         }
+    }
+}
+
+fn update_clients(
+    server_socket: Res<ServerSocket>,
+    client_addresses: Query<(Entity, &UpdateAddress)>,
+) {
+    for (id, addr) in client_addresses {
+        let message = ServerMessage::Ok;
+        server_socket.send_to(&message.encode(), addr.addr);
     }
 }
 

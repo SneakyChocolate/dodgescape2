@@ -42,7 +42,7 @@ pub fn random_position(range: f32) -> Vec2 {
 
 #[derive(Encode, Decode, Debug)]
 pub enum ServerMessage {
-	
+	Ok
 }
 
 impl ServerMessage {
