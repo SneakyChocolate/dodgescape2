@@ -1,11 +1,43 @@
+use std::net::UdpSocket;
+
 use dodgescrape2::*;
 
+#[derive(Resource)]
+pub struct ServerSocket {
+    pub socket: UdpSocket,
+    pub buf: [u8; 1500],
+}
+
+impl ServerSocket {
+    pub fn new(
+        socket: UdpSocket,
+    ) -> Self {
+        Self {
+            socket,
+            buf: [0; 1500],
+        }
+    }
+}
+
 fn main() {
+    let socket = UdpSocket::bind("0.0.0.0:7878").unwrap();
+    socket.set_nonblocking(true).unwrap();
     App::new()
-        .insert_resource(CursorPos(Vec2::ZERO))
+        .add_plugins(DefaultPlugins)
+        .insert_resource(ServerSocket::new(socket))
         .add_systems(Startup, spawn_enemies)
-        .add_systems(Update, (apply_velocity_system, enemy_kill_system))
+        .add_systems(Update, (receive_messages, apply_velocity_system, enemy_kill_system))
         .run();
+}
+
+fn receive_messages(
+    mut server_socket: ResMut<ServerSocket>,
+) {
+    let ServerSocket { socket, buf } = &mut *server_socket;
+
+    if let Ok((len, addr)) = socket.recv_from(buf) {
+        println!("recv {len} bytes from {addr}: {:?}", &buf[..len]);
+    }
 }
 
 fn spawn_enemies(
