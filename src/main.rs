@@ -1,10 +1,4 @@
-use rand::Rng;
-use bevy::window::PrimaryWindow;
-use bevy::{
-    core_pipeline::tonemapping::{DebandDither, Tonemapping},
-    post_process::bloom::{Bloom, BloomCompositeMode},
-    prelude::*,
-};
+use dodgescrape2::*;
 
 fn main() {
     App::new()
@@ -16,23 +10,6 @@ fn main() {
         .run();
 }
 
-#[derive(Resource)]
-pub struct CursorPos(Vec2);
-
-#[derive(Component)]
-pub struct Velocity(Vec2);
-
-#[derive(Component)]
-pub struct Radius(f32);
-
-#[derive(Component)]
-pub struct Player;
-
-#[derive(Component)]
-pub struct Alive(bool);
-
-#[derive(Component)]
-pub struct Enemy;
 
 fn setup(
     mut commands: Commands,
@@ -58,22 +35,6 @@ fn setup(
         MeshMaterial2d(materials.add(Color::srgb(0., 1., 0.))),
     ));
 }
-
-fn random_velocity() -> Vec2 {
-    let mut rng = rand::rng();
-    let angle = rng.random_range(0.0..std::f32::consts::TAU);
-    let speed = rng.random_range(50.0..200.0);
-    Vec2::from_angle(angle) * speed
-}
-
-fn random_position(range: f32) -> Vec2 {
-    let mut rng = rand::rng();
-    Vec2::new(
-        rng.random_range(-range..range),
-        rng.random_range(-range..range),
-    )
-}
-
 
 fn spawn_enemies(
     mut commands: Commands,
