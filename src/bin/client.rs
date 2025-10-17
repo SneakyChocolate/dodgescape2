@@ -1,7 +1,26 @@
+use std::net::UdpSocket;
+
 use dodgescrape2::*;
+
+#[derive(Resource)]
+pub struct ClientSocket {
+    pub socket: UdpSocket,
+}
+
+impl ClientSocket {
+	pub fn new() -> Self {
+		Self {
+			socket: UdpSocket::bind("0.0.0.0:0").unwrap(),
+		}
+	}
+	pub fn send(&self, bytes: &[u8]) {
+		self.socket.send_to(bytes, "127.0.0.1:7878").unwrap();
+	}
+}
 
 fn main() {
     App::new()
+        .insert_resource(ClientSocket::new())
         .insert_resource(CursorPos(Vec2::ZERO))
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
@@ -10,10 +29,14 @@ fn main() {
 }
 
 fn setup(
+	socket: Res<ClientSocket>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
+	let login_message = ClientMessage::Login;
+	socket.send(&login_message.encode());
+
     commands.spawn((
         Camera2d,
         Camera {

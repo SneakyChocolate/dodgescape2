@@ -25,19 +25,54 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .insert_resource(ServerSocket::new(socket))
-        .add_systems(Startup, spawn_enemies)
+        .add_systems(Startup, (setup, spawn_enemies))
         .add_systems(Update, (receive_messages, apply_velocity_system, enemy_kill_system))
         .run();
 }
 
 fn receive_messages(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
     mut server_socket: ResMut<ServerSocket>,
 ) {
     let ServerSocket { socket, buf } = &mut *server_socket;
 
     if let Ok((len, addr)) = socket.recv_from(buf) {
-        println!("recv {len} bytes from {addr}: {:?}", &buf[..len]);
+        let client_message_option = ClientMessage::decode(buf);
+        match client_message_option {
+            Some(client_message) => match client_message {
+                ClientMessage::Login => {
+                    commands.spawn((
+                        Transform::from_xyz(200., 0., 1.),
+                        Player,
+                        Alive(true),
+                        Radius(20.),
+                        Velocity(Vec2::new(0., 0.)),
+                        Mesh2d(meshes.add(Circle::new(20.))),
+                        MeshMaterial2d(materials.add(Color::srgb(0., 1., 0.))),
+                    ));
+                },
+            },
+            None => todo!(),
+        }
     }
+}
+
+fn setup(
+    mut commands: Commands,
+) {
+    commands.spawn((
+        Camera2d,
+        Camera {
+            clear_color: ClearColorConfig::Custom(Color::BLACK),
+            ..default()
+        },
+        Transform::from_xyz(0., 0., 0.),
+        Tonemapping::TonyMcMapface,
+        Bloom::default(),
+        DebandDither::Enabled,
+    ));
 }
 
 fn spawn_enemies(

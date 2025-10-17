@@ -40,7 +40,7 @@ pub fn random_position(range: f32) -> Vec2 {
     )
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 pub enum ServerMessage {
 	
 }
@@ -60,7 +60,7 @@ impl ServerMessage {
 	}
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 pub enum ClientMessage {
 	Login,
 }
