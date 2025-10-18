@@ -1,12 +1,26 @@
 use std::net::UdpSocket;
+use std::collections::HashMap;
 
 use dodgescrape2::*;
+
+fn main() {
+    App::new()
+        .insert_resource(ClientSocket::new())
+        .insert_resource(CursorPos(Vec2::ZERO))
+        .add_plugins(DefaultPlugins)
+        .add_systems(Startup, setup)
+        .add_systems(Update, (receive_messages, cursor_position_system, player_movement_system))
+        .run();
+}
 
 #[derive(Resource)]
 pub struct ClientSocket {
     pub socket: UdpSocket,
     pub buf: [u8; 1000],
 }
+
+#[derive(Resource)]
+struct NetIDMap(HashMap<NetIDType, Entity>);
 
 impl ClientSocket {
 	pub fn new() -> Self {
@@ -18,16 +32,6 @@ impl ClientSocket {
 	pub fn send(&self, bytes: &[u8]) {
 		self.socket.send_to(bytes, "127.0.0.1:7878").unwrap();
 	}
-}
-
-fn main() {
-    App::new()
-        .insert_resource(ClientSocket::new())
-        .insert_resource(CursorPos(Vec2::ZERO))
-        .add_plugins(DefaultPlugins)
-        .add_systems(Startup, setup)
-        .add_systems(Update, (receive_messages, cursor_position_system, player_movement_system))
-        .run();
 }
 
 fn setup(
@@ -107,6 +111,7 @@ fn receive_messages(
 	            ServerMessage::Ok => {
 	            	println!("player was created successfully");
 	            },
+	            ServerMessage::UpdateEnemies(enemies) => todo!(),
 	        },
 	        None => todo!(),
 	    }

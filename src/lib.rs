@@ -7,6 +7,11 @@ pub use bevy::{
     prelude::*,
 };
 
+pub type NetIDType = u128;
+
+#[derive(Component)]
+pub struct NetID(pub NetIDType);
+
 #[derive(Resource)]
 pub struct CursorPos(pub Vec2);
 
@@ -43,7 +48,7 @@ pub fn random_position(range: f32) -> Vec2 {
 #[derive(Encode, Decode, Debug)]
 pub enum ServerMessage {
 	Ok,
-	// UpdateEnemies(Vec<Entity>),
+	UpdateEnemies(Vec<NetIDType>),
 }
 
 impl ServerMessage {

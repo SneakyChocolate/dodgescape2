@@ -1,5 +1,5 @@
 use std::net::{SocketAddr, UdpSocket};
-
+use std::collections::HashMap;
 use dodgescrape2::*;
 
 fn main() {
@@ -17,6 +17,9 @@ fn main() {
 pub struct UpdateAddress {
     addr: SocketAddr,
 }
+
+#[derive(Resource)]
+struct NetIDMap(HashMap<Entity, NetIDType>);
 
 #[derive(Resource)]
 pub struct ServerSocket {
@@ -74,9 +77,10 @@ fn receive_messages(
 fn update_clients(
     server_socket: Res<ServerSocket>,
     client_addresses: Query<(Entity, &UpdateAddress)>,
+    enemies: Query<(Entity, &Transform), With<Enemy>>,
 ) {
     for (id, addr) in client_addresses {
-        let message = ServerMessage::Ok;
+        let message = ServerMessage::UpdateEnemies(vec![]);
         server_socket.send_to(&message.encode(), addr.addr);
     }
 }
