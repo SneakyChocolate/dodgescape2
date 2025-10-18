@@ -85,20 +85,26 @@ fn receive_messages(
     }
 }
 
+const ENEMIES_PER_PACKAGE: usize = (1000. / std::mem::size_of::<EnemyPackage>() as f32).floor() as usize;
+
 fn update_clients(
     server_socket: Res<ServerSocket>,
     client_addresses: Query<(Entity, &UpdateAddress)>,
     enemies: Query<(Entity, &Transform), With<Enemy>>,
     mut net_id_map: ResMut<NetIDMap>,
 ) {
-    let enemies_per_package = (1000. / std::mem::size_of::<EnemyPackage>() as f32).floor();
     let mut enemy_packages: Vec<EnemyPackage> = vec![];
+    let mut counter = 0;
     for (enemy_entity, enemy_transform) in enemies {
         let net_id = net_id_map.0.get(&enemy_entity).unwrap();
         enemy_packages.push(EnemyPackage {
             net_id: *net_id,
             position: enemy_transform.translation.into(),
         });
+        counter += 1;
+        if counter >= ENEMIES_PER_PACKAGE {
+            // TODO
+        }
     }
 
     let message = ServerMessage::UpdateEnemies(enemy_packages);
