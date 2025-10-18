@@ -8,6 +8,8 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .insert_resource(ServerSocket::new(socket))
+        .insert_resource(IDCounter(0))
+        .insert_resource(NetIDMap::new())
         .add_systems(Startup, (setup, spawn_enemies))
         .add_systems(Update, (receive_messages, apply_velocity_system, enemy_kill_system, update_clients))
         .run();
@@ -20,6 +22,15 @@ pub struct UpdateAddress {
 
 #[derive(Resource)]
 struct NetIDMap(HashMap<Entity, NetIDType>);
+
+impl NetIDMap {
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
+}
+
+#[derive(Resource)]
+struct IDCounter(pub NetIDType);
 
 #[derive(Resource)]
 pub struct ServerSocket {
@@ -78,10 +89,23 @@ fn update_clients(
     server_socket: Res<ServerSocket>,
     client_addresses: Query<(Entity, &UpdateAddress)>,
     enemies: Query<(Entity, &Transform), With<Enemy>>,
+    mut net_id_map: ResMut<NetIDMap>,
 ) {
+    let enemies_per_package = (1000. / std::mem::size_of::<EnemyPackage>() as f32).floor();
+    let mut enemy_packages: Vec<EnemyPackage> = vec![];
+    for (enemy_entity, enemy_transform) in enemies {
+        let net_id = net_id_map.0.get(&enemy_entity).unwrap();
+        enemy_packages.push(EnemyPackage {
+            net_id: *net_id,
+            position: enemy_transform.translation.into(),
+        });
+    }
+
+    let message = ServerMessage::UpdateEnemies(enemy_packages);
+    let bytes = message.encode();
+
     for (id, addr) in client_addresses {
-        let message = ServerMessage::UpdateEnemies(vec![]);
-        server_socket.send_to(&message.encode(), addr.addr);
+        server_socket.send_to(&bytes, addr.addr);
     }
 }
 
@@ -105,6 +129,8 @@ fn spawn_enemies(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut id_counter: ResMut<IDCounter>,
+    mut net_id_map: ResMut<NetIDMap>,
 ) {
     let mut rng = rand::rng();
     for _ in 0..100 {
@@ -117,7 +143,7 @@ fn spawn_enemies(
         )));
 
         // Circle mesh
-        commands.spawn((
+        let id = commands.spawn((
             Mesh2d(meshes.add(Circle::new(40.))),
             // 3. Put something bright in a dark environment to see the effect
             material,
@@ -125,7 +151,10 @@ fn spawn_enemies(
             velocity,
             Enemy,
             Radius(40.),
-        ));
+        )).id();
+
+        net_id_map.0.insert(id, id_counter.0);
+        id_counter.0 += 1;
     }
 }
 

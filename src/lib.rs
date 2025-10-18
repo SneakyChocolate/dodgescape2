@@ -9,9 +9,6 @@ pub use bevy::{
 
 pub type NetIDType = u128;
 
-#[derive(Component)]
-pub struct NetID(pub NetIDType);
-
 #[derive(Resource)]
 pub struct CursorPos(pub Vec2);
 
@@ -46,14 +43,37 @@ pub fn random_position(range: f32) -> Vec2 {
 }
 
 #[derive(Encode, Decode, Debug)]
+pub struct MyVec3 {
+	x: f32,
+	y: f32,
+	z: f32,
+}
+
+#[derive(Encode, Decode, Debug)]
+pub struct EnemyPackage {
+	pub net_id: NetIDType,
+	pub position: MyVec3,
+}
+
+impl Into<MyVec3> for Vec3 {
+    fn into(self) -> MyVec3 {
+    	MyVec3 {
+	        x: self.x,
+	        y: self.y,
+	        z: self.z,
+	    }
+    }
+}
+
+#[derive(Encode, Decode, Debug)]
 pub enum ServerMessage {
 	Ok,
-	UpdateEnemies(Vec<NetIDType>),
+	UpdateEnemies(Vec<EnemyPackage>),
 }
 
 impl ServerMessage {
-	pub fn encode(&self) -> [u8; 100] {
-		let mut slice = [0u8; 100];
+	pub fn encode(&self) -> [u8; 1000] {
+		let mut slice = [0u8; 1000];
 		bincode::encode_into_slice(self, &mut slice, bincode::config::standard()).unwrap();
 		slice
 	}
@@ -72,8 +92,8 @@ pub enum ClientMessage {
 }
 
 impl ClientMessage {
-	pub fn encode(&self) -> [u8; 100] {
-		let mut slice = [0u8; 100];
+	pub fn encode(&self) -> [u8; 1000] {
+		let mut slice = [0u8; 1000];
 		bincode::encode_into_slice(self, &mut slice, bincode::config::standard()).unwrap();
 		slice
 	}
