@@ -42,7 +42,7 @@ pub fn random_position(range: f32) -> Vec2 {
     )
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Encode, Decode, Debug, Clone, Copy)]
 pub struct MyVec3 {
 	x: f32,
 	y: f32,
@@ -53,6 +53,12 @@ pub struct MyVec3 {
 pub struct EnemyPackage {
 	pub net_id: NetIDType,
 	pub position: MyVec3,
+}
+
+impl Into<Vec3> for MyVec3 {
+    fn into(self) -> Vec3 {
+    	Vec3::new(self.x, self.y, self.z)
+    }
 }
 
 impl Into<MyVec3> for Vec3 {

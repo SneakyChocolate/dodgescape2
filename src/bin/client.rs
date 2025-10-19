@@ -7,6 +7,7 @@ fn main() {
     App::new()
         .insert_resource(ClientSocket::new())
         .insert_resource(CursorPos(Vec2::ZERO))
+        .insert_resource(NetIDMap::default())
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
         .add_systems(Update, (receive_messages, cursor_position_system, player_movement_system))
@@ -19,7 +20,7 @@ pub struct ClientSocket {
     pub buf: [u8; 1000],
 }
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 struct NetIDMap(HashMap<NetIDType, Entity>);
 
 impl ClientSocket {
@@ -101,6 +102,8 @@ fn receive_messages(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut client_socket: ResMut<ClientSocket>,
+    mut net_id_map: ResMut<NetIDMap>,
+    mut enemy_query: Query<&mut Transform, With<Enemy>>,
 ) {
     let ClientSocket { socket, buf } = &mut *client_socket;
 
@@ -111,7 +114,43 @@ fn receive_messages(
 	            ServerMessage::Ok => {
 	            	println!("player was created successfully");
 	            },
-	            ServerMessage::UpdateEnemies(enemies) => todo!(),
+	            ServerMessage::UpdateEnemies(enemies) => {
+				    let mut rng = rand::rng();
+	            	for enemy in enemies {
+	            		let mut enemy_exists_locally = false;
+	            		// check if enemy exists on local data
+	            		if let Some(enemy_entity) = net_id_map.0.get(&enemy.net_id) {
+	            			let enemy_transform_result = enemy_query.get_mut(*enemy_entity);
+	            			match enemy_transform_result {
+			                    Ok(mut enemy_transform) => {
+			                    	enemy_exists_locally = true;
+			                    	enemy_transform.translation = enemy.position.clone().into();
+			                    },
+			                    Err(_) => { },
+			                }
+	            		}
+
+	            		// create enemy if doesn't exist on local data
+	            		if !enemy_exists_locally {
+					        let material = MeshMaterial2d(materials.add(Color::srgb(
+					            rng.random_range(0.0..4.0),
+					            rng.random_range(0.0..4.0),
+					            rng.random_range(0.0..4.0),
+					        )));
+
+					        let id = commands.spawn((
+					            Mesh2d(meshes.add(Circle::new(40.))),
+					            material,
+					            Transform::from_translation(enemy.position.into()),
+					            Velocity(Vec2::new(0., 0.)),
+					            Enemy,
+					            Radius(40.),
+					        )).id();
+
+					        net_id_map.0.insert(enemy.net_id, id);
+	            		}
+	            	}
+	            },
 	        },
 	        None => todo!(),
 	    }

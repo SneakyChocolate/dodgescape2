@@ -9,7 +9,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .insert_resource(ServerSocket::new(socket))
         .insert_resource(IDCounter(0))
-        .insert_resource(NetIDMap::new())
+        .insert_resource(NetIDMap::default())
         .add_systems(Startup, (setup, spawn_enemies))
         .add_systems(Update, (receive_messages, apply_velocity_system, enemy_kill_system, update_clients))
         .run();
@@ -20,14 +20,8 @@ pub struct UpdateAddress {
     addr: SocketAddr,
 }
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 struct NetIDMap(HashMap<Entity, NetIDType>);
-
-impl NetIDMap {
-    pub fn new() -> Self {
-        Self(HashMap::new())
-    }
-}
 
 #[derive(Resource)]
 struct IDCounter(pub NetIDType);
@@ -93,7 +87,9 @@ fn update_clients(
     enemies: Query<(Entity, &Transform), With<Enemy>>,
     mut net_id_map: ResMut<NetIDMap>,
 ) {
-    let mut enemy_packages: Vec<EnemyPackage> = vec![];
+    let enemy_package_vec_count = (enemies.iter().len() as f32 / ENEMIES_PER_PACKAGE as f32).ceil() as usize;
+    let mut enemy_package_vec = Vec::<Vec<EnemyPackage>>::new();
+    let mut enemy_packages: Vec<EnemyPackage> = Vec::with_capacity(ENEMIES_PER_PACKAGE);
     let mut counter = 0;
     for (enemy_entity, enemy_transform) in enemies {
         let net_id = net_id_map.0.get(&enemy_entity).unwrap();
@@ -103,15 +99,23 @@ fn update_clients(
         });
         counter += 1;
         if counter >= ENEMIES_PER_PACKAGE {
+            counter = 0;
+            enemy_package_vec.push(enemy_packages);
+            enemy_packages = Vec::with_capacity(ENEMIES_PER_PACKAGE);
             // TODO
         }
     }
+    if enemy_packages.len() > 0 {
+        enemy_package_vec.push(enemy_packages);
+    }
 
-    let message = ServerMessage::UpdateEnemies(enemy_packages);
-    let bytes = message.encode();
+    for enemy_packages in enemy_package_vec {
+        let message = ServerMessage::UpdateEnemies(enemy_packages);
+        let bytes = message.encode();
 
-    for (id, addr) in client_addresses {
-        server_socket.send_to(&bytes, addr.addr);
+        for (id, addr) in client_addresses {
+            server_socket.send_to(&bytes, addr.addr);
+        }
     }
 }
 
