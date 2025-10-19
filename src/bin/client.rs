@@ -110,11 +110,11 @@ fn receive_messages(
     let ClientSocket { socket, buf } = &mut *client_socket;
 
     if let Ok((len, addr)) = socket.recv_from(buf) {
-    	let server_message_option = ServerMessage::decode(buf);
+    	let server_message_option = ServerMessage::decode(&buf[..len]);
     	match server_message_option {
 	        Some(server_message) => match server_message {
-	            ServerMessage::Ok => {
-	            	println!("player was created successfully");
+	            ServerMessage::Ok(id) => {
+	            	println!("player was created successfully with id {:?}", id);
 	            },
 	            ServerMessage::UpdateEnemies(enemies) => {
 				    let mut rng = rand::rng();

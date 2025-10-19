@@ -54,6 +54,8 @@ fn receive_messages(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut server_socket: ResMut<ServerSocket>,
+    mut id_counter: ResMut<IDCounter>,
+    mut net_id_map: ResMut<NetIDMap>,
 ) {
     let ServerSocket { socket, buf } = &mut *server_socket;
 
@@ -62,7 +64,7 @@ fn receive_messages(
         match client_message_option {
             Some(client_message) => match client_message {
                 ClientMessage::Login => {
-                    commands.spawn((
+                    let id = commands.spawn((
                         Transform::from_xyz(200., 0., 1.),
                         Player,
                         Alive(true),
@@ -71,7 +73,12 @@ fn receive_messages(
                         Mesh2d(meshes.add(Circle::new(20.))),
                         MeshMaterial2d(materials.add(Color::srgb(0., 1., 0.))),
                         UpdateAddress {addr},
-                    ));
+                    )).id();
+
+                    net_id_map.0.insert(id, id_counter.0);
+                    server_socket.send_to(&ServerMessage::Ok(id_counter.0).encode(), addr);
+
+                    id_counter.0 += 1;
                 },
             },
             None => todo!(),

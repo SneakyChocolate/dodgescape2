@@ -73,7 +73,7 @@ impl Into<MyVec3> for Vec3 {
 
 #[derive(Encode, Decode, Debug)]
 pub enum ServerMessage {
-	Ok,
+	Ok(NetIDType), // the id of the player so that it knows which id it is
 	UpdateEnemies(Vec<EnemyPackage>),
 }
 
