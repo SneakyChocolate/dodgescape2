@@ -25,8 +25,10 @@ struct NetIDMap(HashMap<NetIDType, Entity>);
 
 impl ClientSocket {
 	pub fn new() -> Self {
+	    let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
+	    socket.set_nonblocking(true).unwrap();
 		Self {
-			socket: UdpSocket::bind("0.0.0.0:0").unwrap(),
+			socket,
 		    buf: [0; 1000],
 		}
 	}

@@ -143,9 +143,9 @@ fn spawn_enemies(
     mut net_id_map: ResMut<NetIDMap>,
 ) {
     let mut rng = rand::rng();
-    for _ in 0..100 {
+    for _ in 0..10 {
         let velocity = Velocity(random_velocity());
-        let position = random_position(1000.);
+        let position = random_position(100.);
         let material = MeshMaterial2d(materials.add(Color::srgb(
             rng.random_range(0.0..4.0),
             rng.random_range(0.0..4.0),
