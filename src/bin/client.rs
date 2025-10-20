@@ -46,24 +46,24 @@ fn setup(
 	let login_message = ClientMessage::Login;
 	socket.send(&login_message.encode());
 
-    commands.spawn((
-        Camera2d,
-        Camera {
-            clear_color: ClearColorConfig::Custom(Color::BLACK),
-            ..default()
-        },
-        Tonemapping::TonyMcMapface, // 1. Using a tonemapper that desaturates to white is recommended
-        Bloom::default(),           // 2. Enable bloom for the camera
-        DebandDither::Enabled,      // Optional: bloom causes gradients which cause banding
-        Transform::from_xyz(200., 0., 1.),
-        Player,
-        Alive(true),
-        Radius(20.),
-        Velocity(Vec2::new(0., 0.)),
-        Mesh2d(meshes.add(Circle::new(20.))),
-        // 3. Put something bright in a dark environment to see the effect
-        MeshMaterial2d(materials.add(Color::srgb(0., 1., 0.))),
-    ));
+    // commands.spawn((
+    //     Camera2d,
+    //     Camera {
+    //         clear_color: ClearColorConfig::Custom(Color::BLACK),
+    //         ..default()
+    //     },
+    //     Tonemapping::TonyMcMapface,
+    //     Bloom::default(),
+    //     DebandDither::Enabled,
+    //     Transform::from_xyz(200., 0., 1.),
+    //     Player,
+    //     Alive(true),
+    //     Radius(20.),
+    //     Velocity(Vec2::new(0., 0.)),
+    //     Mesh2d(meshes.add(Circle::new(20.))),
+    //     // 3. Put something bright in a dark environment to see the effect
+    //     MeshMaterial2d(materials.add(Color::srgb(0., 1., 0.))),
+    // ));
 }
 
 fn cursor_position_system(
@@ -105,7 +105,8 @@ fn receive_messages(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut client_socket: ResMut<ClientSocket>,
     mut net_id_map: ResMut<NetIDMap>,
-    mut enemy_query: Query<&mut Transform, With<Enemy>>,
+    mut enemy_query: Query<&mut Transform, (With<Enemy>, Without<Player>)>, // without are required to exclude the queries
+    mut player_query: Query<&mut Transform, (With<Player>, Without<Enemy>)>, // without are required to exclude the queries
 ) {
     let ClientSocket { socket, buf } = &mut *client_socket;
 
@@ -150,6 +151,46 @@ fn receive_messages(
 					        )).id();
 
 					        net_id_map.0.insert(enemy.net_id, id);
+	            		}
+	            	}
+	            },
+	            ServerMessage::UpdatePlayers(players) => {
+				    let mut rng = rand::rng();
+	            	for player in players {
+	            		let mut player_exists_locally = false;
+	            		// check if player exists on local data
+	            		if let Some(player_entity) = net_id_map.0.get(&player.net_id) {
+	            			let player_transform_result = player_query.get_mut(*player_entity);
+	            			match player_transform_result {
+			                    Ok(mut player_transform) => {
+			                    	player_exists_locally = true;
+			                    	player_transform.translation = player.position.clone().into();
+			                    },
+			                    Err(_) => { },
+			                }
+	            		}
+
+	            		// create player if doesn't exist on local data
+	            		if !player_exists_locally {
+					        let id = commands.spawn((
+						        Camera2d,
+						        Camera {
+						            clear_color: ClearColorConfig::Custom(Color::BLACK),
+						            ..default()
+						        },
+						        Tonemapping::TonyMcMapface,
+						        Bloom::default(),
+						        DebandDither::Enabled,
+
+					            Mesh2d(meshes.add(Circle::new(20.))),
+					            Transform::from_translation(player.position.into()),
+					            Velocity(Vec2::new(0., 0.)),
+		                        MeshMaterial2d(materials.add(Color::srgb(0., 1., 0.))),
+					            Player,
+					            Radius(20.),
+					        )).id();
+
+					        net_id_map.0.insert(player.net_id, id);
 	            		}
 	            	}
 	            },

@@ -11,7 +11,7 @@ fn main() {
         .insert_resource(IDCounter(0))
         .insert_resource(NetIDMap::default())
         .add_systems(Startup, (setup, spawn_enemies))
-        .add_systems(Update, (receive_messages, apply_velocity_system, enemy_kill_system, update_clients))
+        .add_systems(Update, (receive_messages, apply_velocity_system, enemy_kill_system, broadcast_enemies, broadcast_players))
         .run();
 }
 
@@ -69,7 +69,7 @@ fn receive_messages(
                         Player,
                         Alive(true),
                         Radius(20.),
-                        Velocity(Vec2::new(0., 0.)),
+                        Velocity(Vec2::new(-200., 0.)),
                         Mesh2d(meshes.add(Circle::new(20.))),
                         MeshMaterial2d(materials.add(Color::srgb(0., 1., 0.))),
                         UpdateAddress {addr},
@@ -87,18 +87,19 @@ fn receive_messages(
 }
 
 const ENEMIES_PER_PACKAGE: usize = (1000. / std::mem::size_of::<EnemyPackage>() as f32).floor() as usize;
+const PLAYERS_PER_PACKAGE: usize = (1000. / std::mem::size_of::<PlayerPackage>() as f32).floor() as usize;
 
-fn update_clients(
+fn broadcast_enemies(
     server_socket: Res<ServerSocket>,
     client_addresses: Query<(Entity, &UpdateAddress)>,
-    enemies: Query<(Entity, &Transform), With<Enemy>>,
+    enemy_query: Query<(Entity, &Transform), With<Enemy>>,
     mut net_id_map: ResMut<NetIDMap>,
 ) {
-    let enemy_package_vec_count = (enemies.iter().len() as f32 / ENEMIES_PER_PACKAGE as f32).ceil() as usize;
+    let enemy_package_vec_count = (enemy_query.iter().len() as f32 / ENEMIES_PER_PACKAGE as f32).ceil() as usize;
     let mut enemy_package_vec = Vec::<Vec<EnemyPackage>>::new();
     let mut enemy_packages: Vec<EnemyPackage> = Vec::with_capacity(ENEMIES_PER_PACKAGE);
     let mut counter = 0;
-    for (enemy_entity, enemy_transform) in enemies {
+    for (enemy_entity, enemy_transform) in enemy_query {
         let net_id = net_id_map.0.get(&enemy_entity).unwrap();
         enemy_packages.push(EnemyPackage {
             net_id: *net_id,
@@ -118,6 +119,43 @@ fn update_clients(
 
     for enemy_packages in enemy_package_vec {
         let message = ServerMessage::UpdateEnemies(enemy_packages);
+        let bytes = message.encode();
+
+        for (id, addr) in client_addresses {
+            server_socket.send_to(&bytes, addr.addr);
+        }
+    }
+}
+
+fn broadcast_players(
+    server_socket: Res<ServerSocket>,
+    client_addresses: Query<(Entity, &UpdateAddress)>,
+    player_query: Query<(Entity, &Transform), With<Player>>,
+    mut net_id_map: ResMut<NetIDMap>,
+) {
+    let player_package_vec_count = (player_query.iter().len() as f32 / PLAYERS_PER_PACKAGE as f32).ceil() as usize;
+    let mut player_package_vec = Vec::<Vec<PlayerPackage>>::new();
+    let mut player_packages: Vec<PlayerPackage> = Vec::with_capacity(PLAYERS_PER_PACKAGE);
+    let mut counter = 0;
+    for (player_entity, player_transform) in player_query {
+        let net_id = net_id_map.0.get(&player_entity).unwrap();
+        player_packages.push(PlayerPackage {
+            net_id: *net_id,
+            position: player_transform.translation.into(),
+        });
+        counter += 1;
+        if counter >= PLAYERS_PER_PACKAGE {
+            counter = 0;
+            player_package_vec.push(player_packages);
+            player_packages = Vec::with_capacity(PLAYERS_PER_PACKAGE);
+        }
+    }
+    if player_packages.len() > 0 {
+        player_package_vec.push(player_packages);
+    }
+
+    for player_packages in player_package_vec {
+        let message = ServerMessage::UpdatePlayers(player_packages);
         let bytes = message.encode();
 
         for (id, addr) in client_addresses {

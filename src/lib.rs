@@ -55,6 +55,12 @@ pub struct EnemyPackage {
 	pub position: MyVec3,
 }
 
+#[derive(Encode, Decode, Debug)]
+pub struct PlayerPackage {
+	pub net_id: NetIDType,
+	pub position: MyVec3,
+}
+
 impl Into<Vec3> for MyVec3 {
     fn into(self) -> Vec3 {
     	Vec3::new(self.x, self.y, self.z)
@@ -75,6 +81,7 @@ impl Into<MyVec3> for Vec3 {
 pub enum ServerMessage {
 	Ok(NetIDType), // the id of the player so that it knows which id it is
 	UpdateEnemies(Vec<EnemyPackage>),
+	UpdatePlayers(Vec<PlayerPackage>),
 }
 
 impl ServerMessage {
