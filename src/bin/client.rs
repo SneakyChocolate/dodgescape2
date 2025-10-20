@@ -7,6 +7,7 @@ fn main() {
     App::new()
         .insert_resource(ClientSocket::new())
         .insert_resource(CursorPos(Vec2::ZERO))
+        .insert_resource(EntityMap::default())
         .insert_resource(NetIDMap::default())
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
@@ -21,7 +22,12 @@ pub struct ClientSocket {
 }
 
 #[derive(Resource, Default)]
-struct NetIDMap(HashMap<NetIDType, Entity>);
+struct NetIDMap(HashMap<Entity, NetIDType>);
+#[derive(Resource, Default)]
+struct EntityMap(HashMap<NetIDType, Entity>);
+
+#[derive(Component)]
+struct Controlled;
 
 impl ClientSocket {
 	pub fn new() -> Self {
@@ -79,10 +85,12 @@ fn cursor_position_system(
 
 fn player_movement_system(
     cursor: Res<CursorPos>,
-    query: Query<(&mut Velocity, &Alive), With<Player>>,
+    player_query: Query<(Entity, &mut Velocity, &Alive), (With<Player>, With<Controlled>)>,
+    mut client_socket: ResMut<ClientSocket>,
+    mut net_id_map: Res<NetIDMap>,
 ) {
-    for (mut velocity, alive) in query {
-        if alive.0 {
+    for (player_entity, mut velocity, alive) in player_query {
+        if alive.0 || true {
             let speed = 300.0; // units per second
             let length = cursor.0.length();
             let threshold = 200.;
@@ -96,6 +104,9 @@ fn player_movement_system(
         else {
             velocity.0 = Vec2::ZERO;
         }
+
+        let net_id = net_id_map.0.get(&player_entity).unwrap();
+        client_socket.send(&ClientMessage::SetVelocity(*net_id, velocity.0.into()).encode());
     }
 }
 
@@ -104,13 +115,14 @@ fn receive_messages(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut client_socket: ResMut<ClientSocket>,
+    mut entity_map: ResMut<EntityMap>,
     mut net_id_map: ResMut<NetIDMap>,
     mut enemy_query: Query<&mut Transform, (With<Enemy>, Without<Player>)>, // without are required to exclude the queries
     mut player_query: Query<&mut Transform, (With<Player>, Without<Enemy>)>, // without are required to exclude the queries
 ) {
     let ClientSocket { socket, buf } = &mut *client_socket;
 
-    if let Ok((len, addr)) = socket.recv_from(buf) {
+    while let Ok((len, addr)) = socket.recv_from(buf) {
     	let server_message_option = ServerMessage::decode(&buf[..len]);
     	match server_message_option {
 	        Some(server_message) => match server_message {
@@ -122,7 +134,7 @@ fn receive_messages(
 	            	for enemy in enemies {
 	            		let mut enemy_exists_locally = false;
 	            		// check if enemy exists on local data
-	            		if let Some(enemy_entity) = net_id_map.0.get(&enemy.net_id) {
+	            		if let Some(enemy_entity) = entity_map.0.get(&enemy.net_id) {
 	            			let enemy_transform_result = enemy_query.get_mut(*enemy_entity);
 	            			match enemy_transform_result {
 			                    Ok(mut enemy_transform) => {
@@ -150,7 +162,8 @@ fn receive_messages(
 					            Radius(40.),
 					        )).id();
 
-					        net_id_map.0.insert(enemy.net_id, id);
+					        entity_map.0.insert(enemy.net_id, id);
+					        net_id_map.0.insert(id, enemy.net_id);
 	            		}
 	            	}
 	            },
@@ -159,7 +172,7 @@ fn receive_messages(
 	            	for player in players {
 	            		let mut player_exists_locally = false;
 	            		// check if player exists on local data
-	            		if let Some(player_entity) = net_id_map.0.get(&player.net_id) {
+	            		if let Some(player_entity) = entity_map.0.get(&player.net_id) {
 	            			let player_transform_result = player_query.get_mut(*player_entity);
 	            			match player_transform_result {
 			                    Ok(mut player_transform) => {
@@ -187,10 +200,13 @@ fn receive_messages(
 					            Velocity(Vec2::new(0., 0.)),
 		                        MeshMaterial2d(materials.add(Color::srgb(0., 1., 0.))),
 					            Player,
+					            Controlled,
+					            Alive(true),
 					            Radius(20.),
 					        )).id();
 
-					        net_id_map.0.insert(player.net_id, id);
+					        entity_map.0.insert(player.net_id, id);
+					        net_id_map.0.insert(id, player.net_id);
 	            		}
 	            	}
 	            },
@@ -199,3 +215,4 @@ fn receive_messages(
 	    }
     }
 }
+

@@ -49,18 +49,6 @@ pub struct MyVec3 {
 	z: f32,
 }
 
-#[derive(Encode, Decode, Debug)]
-pub struct EnemyPackage {
-	pub net_id: NetIDType,
-	pub position: MyVec3,
-}
-
-#[derive(Encode, Decode, Debug)]
-pub struct PlayerPackage {
-	pub net_id: NetIDType,
-	pub position: MyVec3,
-}
-
 impl Into<Vec3> for MyVec3 {
     fn into(self) -> Vec3 {
     	Vec3::new(self.x, self.y, self.z)
@@ -75,6 +63,39 @@ impl Into<MyVec3> for Vec3 {
 	        z: self.z,
 	    }
     }
+}
+
+#[derive(Encode, Decode, Debug, Clone, Copy)]
+pub struct MyVec2 {
+	x: f32,
+	y: f32,
+}
+
+impl Into<Vec2> for MyVec2 {
+    fn into(self) -> Vec2 {
+    	Vec2::new(self.x, self.y)
+    }
+}
+
+impl Into<MyVec2> for Vec2 {
+    fn into(self) -> MyVec2 {
+    	MyVec2 {
+	        x: self.x,
+	        y: self.y,
+	    }
+    }
+}
+
+#[derive(Encode, Decode, Debug)]
+pub struct EnemyPackage {
+	pub net_id: NetIDType,
+	pub position: MyVec3,
+}
+
+#[derive(Encode, Decode, Debug)]
+pub struct PlayerPackage {
+	pub net_id: NetIDType,
+	pub position: MyVec3,
 }
 
 #[derive(Encode, Decode, Debug)]
@@ -102,6 +123,7 @@ impl ServerMessage {
 #[derive(Encode, Decode, Debug)]
 pub enum ClientMessage {
 	Login,
+	SetVelocity(NetIDType, MyVec2),
 }
 
 impl ClientMessage {

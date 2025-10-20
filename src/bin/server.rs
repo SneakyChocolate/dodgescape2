@@ -9,6 +9,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .insert_resource(ServerSocket::new(socket))
         .insert_resource(IDCounter(0))
+        .insert_resource(EntityMap::default())
         .insert_resource(NetIDMap::default())
         .add_systems(Startup, (setup, spawn_enemies))
         .add_systems(Update, (receive_messages, apply_velocity_system, enemy_kill_system, broadcast_enemies, broadcast_players))
@@ -22,6 +23,8 @@ pub struct UpdateAddress {
 
 #[derive(Resource, Default)]
 struct NetIDMap(HashMap<Entity, NetIDType>);
+#[derive(Resource, Default)]
+struct EntityMap(HashMap<NetIDType, Entity>);
 
 #[derive(Resource)]
 struct IDCounter(pub NetIDType);
@@ -56,10 +59,12 @@ fn receive_messages(
     mut server_socket: ResMut<ServerSocket>,
     mut id_counter: ResMut<IDCounter>,
     mut net_id_map: ResMut<NetIDMap>,
+    mut entity_map: ResMut<EntityMap>,
+    mut player_query: Query<&mut Velocity, With<Player>>,
 ) {
     let ServerSocket { socket, buf } = &mut *server_socket;
 
-    if let Ok((len, addr)) = socket.recv_from(buf) {
+    while let Ok((len, addr)) = socket.recv_from(buf) {
         let client_message_option = ClientMessage::decode(buf);
         match client_message_option {
             Some(client_message) => match client_message {
@@ -76,9 +81,30 @@ fn receive_messages(
                     )).id();
 
                     net_id_map.0.insert(id, id_counter.0);
-                    server_socket.send_to(&ServerMessage::Ok(id_counter.0).encode(), addr);
+                    entity_map.0.insert(id_counter.0, id);
+                    socket.send_to(&ServerMessage::Ok(id_counter.0).encode(), addr);
 
                     id_counter.0 += 1;
+                },
+                ClientMessage::SetVelocity(player_net_id, velocity) => {
+                    let player_entity_option = entity_map.0.get(&player_net_id);
+                    let mut player_exists = false;
+                    match player_entity_option {
+                        Some(player_entity) => {
+                            let mut player_velocity_result = player_query.get_mut(*player_entity);
+                            match player_velocity_result {
+                                Ok(mut player_velocity) => {
+                                    player_exists = true;
+                                    player_velocity.0 = velocity.into();
+                                },
+                                Err(_) => {},
+                            }
+                        },
+                        None => {},
+                    }
+                    if !player_exists {
+                        entity_map.0.remove(&player_net_id);
+                    }
                 },
             },
             None => todo!(),
@@ -110,7 +136,6 @@ fn broadcast_enemies(
             counter = 0;
             enemy_package_vec.push(enemy_packages);
             enemy_packages = Vec::with_capacity(ENEMIES_PER_PACKAGE);
-            // TODO
         }
     }
     if enemy_packages.len() > 0 {
@@ -186,6 +211,7 @@ fn spawn_enemies(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut id_counter: ResMut<IDCounter>,
     mut net_id_map: ResMut<NetIDMap>,
+    mut entity_map: ResMut<EntityMap>,
 ) {
     let mut rng = rand::rng();
     for _ in 0..10 {
@@ -209,6 +235,7 @@ fn spawn_enemies(
         )).id();
 
         net_id_map.0.insert(id, id_counter.0);
+        entity_map.0.insert(id_counter.0, id);
         id_counter.0 += 1;
     }
 }
