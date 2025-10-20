@@ -132,13 +132,11 @@ fn receive_messages(
 	            ServerMessage::UpdateEnemies(enemies) => {
 				    let mut rng = rand::rng();
 	            	for enemy in enemies {
-	            		let mut enemy_exists_locally = false;
 	            		// check if enemy exists on local data
 	            		if let Some(enemy_entity) = entity_map.0.get(&enemy.net_id) {
 	            			let enemy_transform_result = enemy_query.get_mut(*enemy_entity);
 	            			match enemy_transform_result {
 			                    Ok(mut enemy_transform) => {
-			                    	enemy_exists_locally = true;
 			                    	enemy_transform.translation = enemy.position.clone().into();
 			                    },
 			                    Err(_) => { },
@@ -146,7 +144,7 @@ fn receive_messages(
 	            		}
 
 	            		// create enemy if doesn't exist on local data
-	            		if !enemy_exists_locally {
+	            		if !entity_map.0.contains_key(&enemy.net_id) {
 					        let material = MeshMaterial2d(materials.add(Color::srgb(
 					            rng.random_range(0.0..4.0),
 					            rng.random_range(0.0..4.0),
@@ -168,15 +166,12 @@ fn receive_messages(
 	            	}
 	            },
 	            ServerMessage::UpdatePlayers(players) => {
-				    let mut rng = rand::rng();
 	            	for player in players {
-	            		let mut player_exists_locally = false;
 	            		// check if player exists on local data
 	            		if let Some(player_entity) = entity_map.0.get(&player.net_id) {
 	            			let player_transform_result = player_query.get_mut(*player_entity);
 	            			match player_transform_result {
 			                    Ok(mut player_transform) => {
-			                    	player_exists_locally = true;
 			                    	player_transform.translation = player.position.clone().into();
 			                    },
 			                    Err(_) => { },
@@ -184,7 +179,7 @@ fn receive_messages(
 	            		}
 
 	            		// create player if doesn't exist on local data
-	            		if !player_exists_locally {
+	            		if !entity_map.0.contains_key(&player.net_id) {
 					        let id = commands.spawn((
 						        Camera2d,
 						        Camera {
