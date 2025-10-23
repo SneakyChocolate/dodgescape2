@@ -1,12 +1,14 @@
 use std::net::{SocketAddr, UdpSocket};
 use std::collections::HashMap;
 use dodgescrape2::*;
+use avian2d::prelude::*;
 
 fn main() {
     let socket = UdpSocket::bind("0.0.0.0:7878").unwrap();
     socket.set_nonblocking(true).unwrap();
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugins(PhysicsPlugins::default())
         .insert_resource(ServerSocket::new(socket))
         .insert_resource(IDCounter(0))
         .insert_resource(EntityMap::default())
@@ -15,6 +17,15 @@ fn main() {
         .add_systems(Update, (receive_messages, apply_velocity_system, enemy_kill_system, broadcast_enemies, broadcast_players))
         .run();
 }
+
+// Define collision layers
+#[derive(PhysicsLayer, Clone, Copy, Debug, Default)]
+enum Layer {
+    #[default]
+    Boundary,
+    Ball,
+}
+
 
 #[derive(Component)]
 pub struct UpdateAddress {
@@ -213,10 +224,30 @@ fn spawn_enemies(
     mut net_id_map: ResMut<NetIDMap>,
     mut entity_map: ResMut<EntityMap>,
 ) {
+    // + Spawn static boundary colliders
+    let half_boundary = 3000.0;
+    let thickness = 10.0;
+    for &pos in &[-half_boundary, half_boundary] {
+        // vertical walls
+        commands.spawn((
+            Transform::from_xyz(pos, 0., 0.),
+            RigidBody::Static,
+            Collider::rectangle(thickness, half_boundary),
+            CollisionLayers::new([Layer::Boundary], [Layer::Ball]),
+        ));
+        // horizontal walls
+        commands.spawn((
+            Transform::from_xyz(0., pos, 0.),
+            RigidBody::Static,
+            Collider::rectangle(half_boundary, thickness),
+            CollisionLayers::new([Layer::Boundary], [Layer::Ball]),
+        ));
+    }
+
     let mut rng = rand::rng();
-    for _ in 0..10 {
+    for _ in 0..1000 {
         let velocity = Velocity(random_velocity());
-        let position = random_position(100.);
+        let position = random_position(2000.);
         let material = MeshMaterial2d(materials.add(Color::srgb(
             rng.random_range(0.0..4.0),
             rng.random_range(0.0..4.0),
@@ -225,13 +256,15 @@ fn spawn_enemies(
 
         // Circle mesh
         let id = commands.spawn((
-            Mesh2d(meshes.add(Circle::new(40.))),
-            // 3. Put something bright in a dark environment to see the effect
-            material,
             Transform::from_translation(position.extend(0.)),
-            velocity,
+            Mesh2d(meshes.add(Circle::new(40.))),
+            material,
+            RigidBody::Dynamic,       // + physics
+            Collider::circle(40.),      // + collider
+            LinearVelocity(velocity.0),   // + initial velocity for Avian
             Enemy,
             Radius(40.),
+            CollisionLayers::new([Layer::Ball], [Layer::Boundary]),
         )).id();
 
         net_id_map.0.insert(id, id_counter.0);
