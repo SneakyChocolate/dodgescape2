@@ -86,10 +86,11 @@ impl Into<MyVec2> for Vec2 {
     }
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Encode, Decode, Debug, Clone)]
 pub struct EnemyPackage {
 	pub net_id: NetIDType,
 	pub position: MyVec3,
+	pub radius: f32,
 }
 
 #[derive(Encode, Decode, Debug)]

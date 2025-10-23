@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use dodgescrape2::*;
 use avian2d::prelude::*;
 
+const ENEMY_RADIUS: f32 = 20.;
+
 fn main() {
     let socket = UdpSocket::bind("0.0.0.0:7878").unwrap();
     socket.set_nonblocking(true).unwrap();
@@ -129,36 +131,40 @@ const PLAYERS_PER_PACKAGE: usize = (1000. / std::mem::size_of::<PlayerPackage>()
 
 fn broadcast_enemies(
     server_socket: Res<ServerSocket>,
-    client_addresses: Query<(Entity, &UpdateAddress)>,
-    enemy_query: Query<(Entity, &Transform), With<Enemy>>,
+    client_addresses: Query<(Entity, &UpdateAddress, &Transform)>,
+    enemy_query: Query<(Entity, &Transform, &Radius), With<Enemy>>,
     mut net_id_map: ResMut<NetIDMap>,
 ) {
-    let enemy_package_vec_count = (enemy_query.iter().len() as f32 / ENEMIES_PER_PACKAGE as f32).ceil() as usize;
-    let mut enemy_package_vec = Vec::<Vec<EnemyPackage>>::new();
-    let mut enemy_packages: Vec<EnemyPackage> = Vec::with_capacity(ENEMIES_PER_PACKAGE);
-    let mut counter = 0;
-    for (enemy_entity, enemy_transform) in enemy_query {
-        let net_id = net_id_map.0.get(&enemy_entity).unwrap();
-        enemy_packages.push(EnemyPackage {
-            net_id: *net_id,
-            position: enemy_transform.translation.into(),
-        });
-        counter += 1;
-        if counter >= ENEMIES_PER_PACKAGE {
-            counter = 0;
-            enemy_package_vec.push(enemy_packages);
-            enemy_packages = Vec::with_capacity(ENEMIES_PER_PACKAGE);
-        }
-    }
-    if enemy_packages.len() > 0 {
-        enemy_package_vec.push(enemy_packages);
-    }
+    const BROADCAST_RADIUS: f32 = 500.0;
+    const RADIUS_SQUARED: f32 = BROADCAST_RADIUS * BROADCAST_RADIUS; // Avoid sqrt in distance checks
 
-    for enemy_packages in enemy_package_vec {
-        let message = ServerMessage::UpdateEnemies(enemy_packages);
-        let bytes = message.encode();
+    // Process each client separately
+    for (id, addr, player_transform) in client_addresses.iter() {
+        let player_pos = player_transform.translation;
+        
+        // Collect enemies within radius for this specific player
+        let mut nearby_enemies: Vec<EnemyPackage> = enemy_query
+            .iter()
+            .filter_map(|(enemy_entity, enemy_transform, radius)| {
+                let distance_squared = player_pos.distance_squared(enemy_transform.translation);
+                
+                if distance_squared <= RADIUS_SQUARED {
+                    let net_id = net_id_map.0.get(&enemy_entity)?;
+                    Some(EnemyPackage {
+                        net_id: *net_id,
+                        position: enemy_transform.translation.into(),
+                        radius: radius.0,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
 
-        for (id, addr) in client_addresses {
+        // Split into chunks and send
+        for enemy_chunk in nearby_enemies.chunks(ENEMIES_PER_PACKAGE) {
+            let message = ServerMessage::UpdateEnemies(enemy_chunk.to_vec());
+            let bytes = message.encode();
             server_socket.send_to(&bytes, addr.addr);
         }
     }
@@ -225,28 +231,37 @@ fn spawn_enemies(
     mut net_id_map: ResMut<NetIDMap>,
     mut entity_map: ResMut<EntityMap>,
 ) {
+    let mut rng = rand::rng();
     // + Spawn static boundary colliders
     let half_boundary = 3000.0;
     let thickness = 10.0;
+    let wall_material = MeshMaterial2d(materials.add(Color::srgb(
+        rng.random_range(0.0..4.0),
+        rng.random_range(0.0..4.0),
+        rng.random_range(0.0..4.0),
+    )));
     for &pos in &[-half_boundary, half_boundary] {
         // vertical walls
         commands.spawn((
+            Mesh2d(meshes.add(Rectangle::new(thickness, half_boundary * 2.))),
+            wall_material.clone(),
             Transform::from_xyz(pos, 0., 0.),
             RigidBody::Static,
-            Collider::rectangle(thickness, half_boundary),
+            Collider::rectangle(thickness, half_boundary * 2.),
             CollisionLayers::new([Layer::Boundary], [Layer::Ball]),
         ));
         // horizontal walls
         commands.spawn((
+            Mesh2d(meshes.add(Rectangle::new(half_boundary * 2., thickness))),
+            wall_material.clone(),
             Transform::from_xyz(0., pos, 0.),
             RigidBody::Static,
-            Collider::rectangle(half_boundary, thickness),
+            Collider::rectangle(half_boundary * 2., thickness),
             CollisionLayers::new([Layer::Boundary], [Layer::Ball]),
         ));
     }
 
-    let mut rng = rand::rng();
-    for _ in 0..500 {
+    for _ in 0..5000 {
         let velocity = Velocity(random_velocity());
         let position = random_position(2000.);
         let material = MeshMaterial2d(materials.add(Color::srgb(
@@ -258,16 +273,16 @@ fn spawn_enemies(
         // Circle mesh
         let id = commands.spawn((
             Transform::from_translation(position.extend(0.)),
-            Mesh2d(meshes.add(Circle::new(40.))),
+            Mesh2d(meshes.add(Circle::new(ENEMY_RADIUS))),
             material,
             RigidBody::Dynamic,
-            Collider::circle(40.),
+            Collider::circle(ENEMY_RADIUS),
             LinearVelocity(velocity.0),
             CollisionLayers::new([Layer::Ball], [Layer::Boundary]),
             Restitution::new(1.0), // Perfect bounce (1.0 = 100% energy retained)
             Friction::ZERO.with_combine_rule(CoefficientCombine::Min), // Remove friction
             Enemy,
-            Radius(40.),
+            Radius(ENEMY_RADIUS),
         )).id();
 
         net_id_map.0.insert(id, id_counter.0);

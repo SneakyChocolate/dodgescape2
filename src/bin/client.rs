@@ -52,24 +52,29 @@ fn setup(
     let login_message = ClientMessage::Login;
     socket.send(&login_message.encode());
 
-    // commands.spawn((
-    //     Camera2d,
-    //     Camera {
-    //         clear_color: ClearColorConfig::Custom(Color::BLACK),
-    //         ..default()
-    //     },
-    //     Tonemapping::TonyMcMapface,
-    //     Bloom::default(),
-    //     DebandDither::Enabled,
-    //     Transform::from_xyz(200., 0., 1.),
-    //     Player,
-    //     Alive(true),
-    //     Radius(20.),
-    //     Velocity(Vec2::new(0., 0.)),
-    //     Mesh2d(meshes.add(Circle::new(20.))),
-    //     // 3. Put something bright in a dark environment to see the effect
-    //     MeshMaterial2d(materials.add(Color::srgb(0., 1., 0.))),
-    // ));
+    let mut rng = rand::rng();
+    // + Spawn static boundary colliders
+    let half_boundary = 3000.0;
+    let thickness = 10.0;
+    let wall_material = MeshMaterial2d(materials.add(Color::srgb(
+        rng.random_range(0.0..4.0),
+        rng.random_range(0.0..4.0),
+        rng.random_range(0.0..4.0),
+    )));
+    for &pos in &[-half_boundary, half_boundary] {
+        // vertical walls
+        commands.spawn((
+            Mesh2d(meshes.add(Rectangle::new(thickness, half_boundary * 2.))),
+            wall_material.clone(),
+            Transform::from_xyz(pos, 0., 0.),
+        ));
+        // horizontal walls
+        commands.spawn((
+            Mesh2d(meshes.add(Rectangle::new(half_boundary * 2., thickness))),
+            wall_material.clone(),
+            Transform::from_xyz(0., pos, 0.),
+        ));
+    }
 }
 
 fn cursor_position_system(
@@ -154,22 +159,22 @@ fn receive_messages(
                         net_id_map.0.insert(id, net_id);
                     }
                 },
-                ServerMessage::UpdateEnemies(enemies) => {
+                ServerMessage::UpdateEnemies(enemy_packages) => {
                     let mut rng = rand::rng();
-                    for enemy in enemies {
+                    for enemy_package in enemy_packages {
                         // check if enemy exists on local data
-                        if let Some(enemy_entity) = entity_map.0.get(&enemy.net_id) {
+                        if let Some(enemy_entity) = entity_map.0.get(&enemy_package.net_id) {
                             let enemy_transform_result = enemy_query.get_mut(*enemy_entity);
                             match enemy_transform_result {
                                 Ok(mut enemy_transform) => {
-                                    enemy_transform.translation = enemy.position.clone().into();
+                                    enemy_transform.translation = enemy_package.position.clone().into();
                                 },
                                 Err(_) => { },
                             }
                         }
 
                         // create enemy if doesn't exist on local data
-                        if !entity_map.0.contains_key(&enemy.net_id) {
+                        if !entity_map.0.contains_key(&enemy_package.net_id) {
                             let material = MeshMaterial2d(materials.add(Color::srgb(
                                 rng.random_range(0.0..4.0),
                                 rng.random_range(0.0..4.0),
@@ -177,16 +182,16 @@ fn receive_messages(
                             )));
 
                             let id = commands.spawn((
-                                Mesh2d(meshes.add(Circle::new(40.))),
+                                Mesh2d(meshes.add(Circle::new(enemy_package.radius))),
                                 material,
-                                Transform::from_translation(enemy.position.into()),
+                                Transform::from_translation(enemy_package.position.into()),
                                 Velocity(Vec2::new(0., 0.)),
                                 Enemy,
-                                Radius(40.),
+                                Radius(enemy_package.radius),
                             )).id();
 
-                            entity_map.0.insert(enemy.net_id, id);
-                            net_id_map.0.insert(id, enemy.net_id);
+                            entity_map.0.insert(enemy_package.net_id, id);
+                            net_id_map.0.insert(id, enemy_package.net_id);
                         }
                     }
                 },
