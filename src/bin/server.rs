@@ -9,6 +9,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(PhysicsPlugins::default())
+        .insert_resource(Gravity::ZERO)
         .insert_resource(ServerSocket::new(socket))
         .insert_resource(IDCounter(0))
         .insert_resource(EntityMap::default())
@@ -245,7 +246,7 @@ fn spawn_enemies(
     }
 
     let mut rng = rand::rng();
-    for _ in 0..1000 {
+    for _ in 0..500 {
         let velocity = Velocity(random_velocity());
         let position = random_position(2000.);
         let material = MeshMaterial2d(materials.add(Color::srgb(
@@ -259,12 +260,14 @@ fn spawn_enemies(
             Transform::from_translation(position.extend(0.)),
             Mesh2d(meshes.add(Circle::new(40.))),
             material,
-            RigidBody::Dynamic,       // + physics
-            Collider::circle(40.),      // + collider
-            LinearVelocity(velocity.0),   // + initial velocity for Avian
+            RigidBody::Dynamic,
+            Collider::circle(40.),
+            LinearVelocity(velocity.0),
+            CollisionLayers::new([Layer::Ball], [Layer::Boundary]),
+            Restitution::new(1.0), // Perfect bounce (1.0 = 100% energy retained)
+            Friction::ZERO.with_combine_rule(CoefficientCombine::Min), // Remove friction
             Enemy,
             Radius(40.),
-            CollisionLayers::new([Layer::Ball], [Layer::Boundary]),
         )).id();
 
         net_id_map.0.insert(id, id_counter.0);
