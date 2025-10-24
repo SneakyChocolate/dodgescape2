@@ -5,14 +5,65 @@ use avian2d::prelude::*;
 
 const ENEMY_RADIUS: f32 = 20.;
 
+pub struct ServerSocket {
+    pub socket: UdpSocket,
+    pub buf: [u8; 1000],
+}
+
+impl ServerSocket {
+    pub fn new(
+        socket: UdpSocket,
+    ) -> Self {
+        Self {
+            socket,
+            buf: [0; 1000],
+        }
+    }
+    pub fn send_to(&self, bytes: &[u8], addr: SocketAddr) -> bool {
+        match self.socket.send_to(bytes, addr) {
+            Ok(l) => l == bytes.len(),
+            Err(_) => false,
+        }
+    }
+}
+
+#[derive(Resource)]
+pub struct IncomingReceiver(crossbeam::channel::Receiver<(SocketAddr, ClientMessage)>);
+#[derive(Resource)]
+pub struct OutgoingSender(crossbeam::channel::Sender<(SocketAddr, ServerMessage)>);
+
 fn main() {
-    let socket = UdpSocket::bind("0.0.0.0:7878").unwrap();
-    socket.set_nonblocking(true).unwrap();
+    let (incoming_sender, incoming_receiver) = crossbeam::channel::unbounded::<(SocketAddr, ClientMessage)>();
+    let (outgoing_sender, outgoing_receiver) = crossbeam::channel::unbounded::<(SocketAddr, ServerMessage)>();
+
+    let network_thread = std::thread::spawn(move || {
+        let socket = UdpSocket::bind("0.0.0.0:7878").unwrap();
+        socket.set_nonblocking(true).unwrap();
+        let mut server_socket = ServerSocket::new(socket);
+        loop {
+            // get from game
+            while let Ok((addr, outgoing_package)) = outgoing_receiver.try_recv() {
+                let bytes = outgoing_package.encode();
+                server_socket.send_to(&bytes, addr);
+            }
+
+            // get from socket
+            let ServerSocket { socket, buf } = &mut server_socket;
+
+            while let Ok((len, addr)) = socket.recv_from(buf) {
+                if let Some(client_message) = ClientMessage::decode(buf) {
+                    incoming_sender.send((addr, client_message));
+                }
+            }
+        }
+    });
+
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(PhysicsPlugins::default())
+        .insert_resource(IncomingReceiver(incoming_receiver))
+        .insert_resource(OutgoingSender(outgoing_sender))
         .insert_resource(Gravity::ZERO)
-        .insert_resource(ServerSocket::new(socket))
         .insert_resource(IDCounter(0))
         .insert_resource(EntityMap::default())
         .insert_resource(NetIDMap::default())
@@ -43,85 +94,58 @@ struct EntityMap(HashMap<NetIDType, Entity>);
 #[derive(Resource)]
 struct IDCounter(pub NetIDType);
 
-#[derive(Resource)]
-pub struct ServerSocket {
-    pub socket: UdpSocket,
-    pub buf: [u8; 1000],
-}
-
-impl ServerSocket {
-    pub fn new(
-        socket: UdpSocket,
-    ) -> Self {
-        Self {
-            socket,
-            buf: [0; 1000],
-        }
-    }
-    pub fn send_to(&self, bytes: &[u8], addr: SocketAddr) -> bool {
-        match self.socket.send_to(bytes, addr) {
-            Ok(l) => l == bytes.len(),
-            Err(_) => false,
-        }
-    }
-}
 
 fn receive_messages(
+    incoming_receiver: Res<IncomingReceiver>,
+    outgoing_sender: Res<OutgoingSender>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    mut server_socket: ResMut<ServerSocket>,
     mut id_counter: ResMut<IDCounter>,
     mut net_id_map: ResMut<NetIDMap>,
     mut entity_map: ResMut<EntityMap>,
     mut player_query: Query<&mut Velocity, With<Player>>,
 ) {
-    let ServerSocket { socket, buf } = &mut *server_socket;
+    while let Ok((addr, client_message)) = incoming_receiver.0.try_recv() {
+        match client_message {
+            ClientMessage::Login => {
+                let id = commands.spawn((
+                    Transform::from_xyz(200., 0., 1.),
+                    Player,
+                    Alive(true),
+                    Radius(20.),
+                    Velocity(Vec2::new(-200., 0.)),
+                    Mesh2d(meshes.add(Circle::new(20.))),
+                    MeshMaterial2d(materials.add(Color::srgb(0., 1., 0.))),
+                    UpdateAddress {addr},
+                )).id();
 
-    while let Ok((len, addr)) = socket.recv_from(buf) {
-        let client_message_option = ClientMessage::decode(buf);
-        match client_message_option {
-            Some(client_message) => match client_message {
-                ClientMessage::Login => {
-                    let id = commands.spawn((
-                        Transform::from_xyz(200., 0., 1.),
-                        Player,
-                        Alive(true),
-                        Radius(20.),
-                        Velocity(Vec2::new(-200., 0.)),
-                        Mesh2d(meshes.add(Circle::new(20.))),
-                        MeshMaterial2d(materials.add(Color::srgb(0., 1., 0.))),
-                        UpdateAddress {addr},
-                    )).id();
+                net_id_map.0.insert(id, id_counter.0);
+                entity_map.0.insert(id_counter.0, id);
+                outgoing_sender.0.send((addr, ServerMessage::Ok(id_counter.0)));
 
-                    net_id_map.0.insert(id, id_counter.0);
-                    entity_map.0.insert(id_counter.0, id);
-                    socket.send_to(&ServerMessage::Ok(id_counter.0).encode(), addr);
-
-                    id_counter.0 += 1;
-                },
-                ClientMessage::SetVelocity(player_net_id, velocity) => {
-                    let player_entity_option = entity_map.0.get(&player_net_id);
-                    let mut player_exists = false;
-                    match player_entity_option {
-                        Some(player_entity) => {
-                            let mut player_velocity_result = player_query.get_mut(*player_entity);
-                            match player_velocity_result {
-                                Ok(mut player_velocity) => {
-                                    player_exists = true;
-                                    player_velocity.0 = velocity.into();
-                                },
-                                Err(_) => {},
-                            }
-                        },
-                        None => {},
-                    }
-                    if !player_exists {
-                        entity_map.0.remove(&player_net_id);
-                    }
-                },
+                id_counter.0 += 1;
             },
-            None => todo!(),
+            ClientMessage::SetVelocity(player_net_id, velocity) => {
+                let player_entity_option = entity_map.0.get(&player_net_id);
+                let mut player_exists = false;
+                match player_entity_option {
+                    Some(player_entity) => {
+                        let mut player_velocity_result = player_query.get_mut(*player_entity);
+                        match player_velocity_result {
+                            Ok(mut player_velocity) => {
+                                player_exists = true;
+                                player_velocity.0 = velocity.into();
+                            },
+                            Err(_) => {},
+                        }
+                    },
+                    None => {},
+                }
+                if !player_exists {
+                    entity_map.0.remove(&player_net_id);
+                }
+            },
         }
     }
 }
@@ -130,7 +154,7 @@ const ENEMIES_PER_PACKAGE: usize = (1000. / std::mem::size_of::<EnemyPackage>() 
 const PLAYERS_PER_PACKAGE: usize = (1000. / std::mem::size_of::<PlayerPackage>() as f32).floor() as usize;
 
 fn broadcast_enemies(
-    server_socket: Res<ServerSocket>,
+    outgoing_sender: Res<OutgoingSender>,
     client_addresses: Query<(Entity, &UpdateAddress, &Transform)>,
     enemy_query: Query<(Entity, &Transform, &Radius), With<Enemy>>,
     mut net_id_map: ResMut<NetIDMap>,
@@ -164,14 +188,13 @@ fn broadcast_enemies(
         // Split into chunks and send
         for enemy_chunk in nearby_enemies.chunks(ENEMIES_PER_PACKAGE) {
             let message = ServerMessage::UpdateEnemies(enemy_chunk.to_vec());
-            let bytes = message.encode();
-            server_socket.send_to(&bytes, addr.addr);
+            outgoing_sender.0.send((addr.addr, message));
         }
     }
 }
 
 fn broadcast_players(
-    server_socket: Res<ServerSocket>,
+    outgoing_sender: Res<OutgoingSender>,
     client_addresses: Query<(Entity, &UpdateAddress)>,
     player_query: Query<(Entity, &Transform), With<Player>>,
     mut net_id_map: ResMut<NetIDMap>,
@@ -199,10 +222,9 @@ fn broadcast_players(
 
     for player_packages in player_package_vec {
         let message = ServerMessage::UpdatePlayers(player_packages);
-        let bytes = message.encode();
 
         for (id, addr) in client_addresses {
-            server_socket.send_to(&bytes, addr.addr);
+            outgoing_sender.0.send((addr.addr, message.clone()));
         }
     }
 }

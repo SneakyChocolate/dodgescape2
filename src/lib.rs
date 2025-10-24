@@ -93,13 +93,13 @@ pub struct EnemyPackage {
 	pub radius: f32,
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Encode, Decode, Debug, Clone)]
 pub struct PlayerPackage {
 	pub net_id: NetIDType,
 	pub position: MyVec3,
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Encode, Decode, Debug, Clone)]
 pub enum ServerMessage {
 	Ok(NetIDType), // the id of the player so that it knows which id it is
 	UpdateEnemies(Vec<EnemyPackage>),

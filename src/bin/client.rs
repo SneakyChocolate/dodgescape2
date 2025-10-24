@@ -1,5 +1,5 @@
 use std::net::UdpSocket;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use dodgescrape2::*;
 
@@ -161,15 +161,12 @@ fn receive_messages(
                 },
                 ServerMessage::UpdateEnemies(enemy_packages) => {
                     let mut rng = rand::rng();
+
                     for enemy_package in enemy_packages {
                         // check if enemy exists on local data
                         if let Some(enemy_entity) = entity_map.0.get(&enemy_package.net_id) {
-                            let enemy_transform_result = enemy_query.get_mut(*enemy_entity);
-                            match enemy_transform_result {
-                                Ok(mut enemy_transform) => {
-                                    enemy_transform.translation = enemy_package.position.clone().into();
-                                },
-                                Err(_) => { },
+                            if let Ok(mut enemy_transform) = enemy_query.get_mut(*enemy_entity) {
+                                 enemy_transform.translation = enemy_package.position.clone().into();
                             }
                         }
 
