@@ -71,9 +71,9 @@ fn main() {
             receive_messages,
             // apply_velocity_system,
             enemy_kill_system,
-            broadcast_transform_updates,
-            broadcast_enemy_spawns,
-            broadcast_player_spawns))
+            // broadcast_transform_updates,
+            broadcast_enemies,
+            broadcast_players))
         .run();
 }
 
@@ -147,71 +147,6 @@ fn receive_messages(
     }
 }
 
-fn broadcast_player_spawns(
-    outgoing_sender: Res<OutgoingSender>,
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    mut id_counter: ResMut<IDCounter>,
-    mut net_id_map: ResMut<NetIDMap>,
-    mut entity_map: ResMut<EntityMap>,
-    client_addresses: Query<(Entity, &UpdateAddress), With<PendingSpawn>>,
-    player_query: Query<(Entity, &Transform, &Mesh2d, &LinearVelocity, &MeshMaterial2d<ColorMaterial>, &Player, &Alive, &Radius)>,
-) {
-    for (id, addr) in client_addresses.iter() {
-        let mut entity_packages = Vec::<EntityPackage>::new();
-        for (entity, transform, mesh2d, velocity, meshmaterial2d, player, alive, radius) in &player_query {
-            let net_id = net_id_map.0.get(&entity).unwrap();
-            entity_packages.push(EntityPackage { net_id: *net_id, components: vec![
-                (*transform).into(),
-                NetComponent::CircleMesh(radius.0),
-                (*transform).into(),
-                (*velocity).into(),
-                (materials.get(meshmaterial2d).unwrap().clone()).into(),
-                (*player).into(),
-                (*alive).into(),
-                (*radius).into(),
-            ] });
-        }
-        for chonky in entity_packages.chunks(2) {
-            outgoing_sender.0.send((addr.addr, ServerMessage::SpawnEntities(chonky.to_vec())));
-            commands.entity(id).remove::<PendingSpawn>();
-        }
-    }
-}
-
-fn broadcast_enemy_spawns(
-    outgoing_sender: Res<OutgoingSender>,
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    mut id_counter: ResMut<IDCounter>,
-    mut net_id_map: ResMut<NetIDMap>,
-    mut entity_map: ResMut<EntityMap>,
-    client_addresses: Query<(Entity, &UpdateAddress), With<PendingSpawn>>,
-    enemy_query: Query<(Entity, &Transform, &Mesh2d, &LinearVelocity, &MeshMaterial2d<ColorMaterial>, &Enemy, &Radius)>,
-) {
-    for (id, addr) in client_addresses.iter() {
-        let mut entity_packages = Vec::<EntityPackage>::new();
-        for (entity, transform, mesh2d, velocity, meshmaterial2d, enemy, radius) in &enemy_query {
-            let net_id = net_id_map.0.get(&entity).unwrap();
-            entity_packages.push(EntityPackage { net_id: *net_id, components: vec![
-                (*transform).into(),
-                NetComponent::CircleMesh(radius.0),
-                (*transform).into(),
-                (*velocity).into(),
-                (materials.get(meshmaterial2d).unwrap().clone()).into(),
-                (*enemy).into(),
-                (*radius).into(),
-            ] });
-        }
-        for chonky in entity_packages.chunks(2) {
-            outgoing_sender.0.send((addr.addr, ServerMessage::SpawnEntities(chonky.to_vec())));
-            commands.entity(id).remove::<PendingSpawn>();
-        }
-    }
-}
-
 const ENEMIES_PER_PACKAGE: usize = (1000. / std::mem::size_of::<EnemyPackage>() as f32).floor() as usize;
 const PLAYERS_PER_PACKAGE: usize = (1000. / std::mem::size_of::<PlayerPackage>() as f32).floor() as usize;
 
@@ -250,46 +185,6 @@ fn broadcast_enemies(
         // Split into chunks and send
         for enemy_chunk in nearby_enemies.chunks(ENEMIES_PER_PACKAGE) {
             let message = ServerMessage::UpdateEnemies(enemy_chunk.to_vec());
-            outgoing_sender.0.send((addr.addr, message));
-        }
-    }
-}
-
-fn broadcast_transform_updates(
-    outgoing_sender: Res<OutgoingSender>,
-    client_addresses: Query<(Entity, &UpdateAddress, &Transform)>,
-    transform_query: Query<(Entity, &Transform)>,
-    mut net_id_map: ResMut<NetIDMap>,
-) {
-    const BROADCAST_RADIUS: f32 = 500.0;
-    const RADIUS_SQUARED: f32 = BROADCAST_RADIUS * BROADCAST_RADIUS;
-
-    for (id, addr, player_transform) in client_addresses.iter() {
-        let player_pos = player_transform.translation;
-        
-        let mut nearby: Vec<EntityPackage> = transform_query
-            .iter()
-            .filter_map(|(entity, transform)| {
-                let distance_squared = player_pos.distance_squared(transform.translation);
-                
-                if distance_squared <= RADIUS_SQUARED {
-                    let net_id = net_id_map.0.get(&entity)?;
-                    Some(EntityPackage {
-                        net_id: *net_id,
-                        components: vec![NetComponent::Transform {
-                            translation: transform.translation.into(),
-                            rotation: Rotation2d(0.),
-                            scale: Vec3::ONE.into()
-                        }],
-                    })
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        for chonky in nearby.chunks(10) {
-            let message = ServerMessage::UpdateEntities(chonky.to_vec());
             outgoing_sender.0.send((addr.addr, message));
         }
     }
