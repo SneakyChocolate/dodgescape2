@@ -71,9 +71,11 @@ fn main() {
             receive_messages,
             // apply_velocity_system,
             enemy_kill_system,
-            broadcast_transform_updates,
             broadcast_enemy_spawns,
-            broadcast_player_spawns))
+            broadcast_player_spawns,
+            broadcast_enemies,
+            broadcast_players,
+        ))
         .run();
 }
 
@@ -175,8 +177,8 @@ fn broadcast_player_spawns(
         }
         for chonky in entity_packages.chunks(2) {
             outgoing_sender.0.send((addr.addr, ServerMessage::SpawnEntities(chonky.to_vec())));
-            commands.entity(id).remove::<PendingSpawn>();
         }
+        commands.entity(id).remove::<PendingSpawn>();
     }
 }
 
@@ -207,8 +209,8 @@ fn broadcast_enemy_spawns(
         }
         for chonky in entity_packages.chunks(2) {
             outgoing_sender.0.send((addr.addr, ServerMessage::SpawnEntities(chonky.to_vec())));
-            commands.entity(id).remove::<PendingSpawn>();
         }
+        commands.entity(id).remove::<PendingSpawn>();
     }
 }
 
@@ -250,46 +252,6 @@ fn broadcast_enemies(
         // Split into chunks and send
         for enemy_chunk in nearby_enemies.chunks(ENEMIES_PER_PACKAGE) {
             let message = ServerMessage::UpdateEnemies(enemy_chunk.to_vec());
-            outgoing_sender.0.send((addr.addr, message));
-        }
-    }
-}
-
-fn broadcast_transform_updates(
-    outgoing_sender: Res<OutgoingSender>,
-    client_addresses: Query<(Entity, &UpdateAddress, &Transform)>,
-    transform_query: Query<(Entity, &Transform)>,
-    mut net_id_map: ResMut<NetIDMap>,
-) {
-    const BROADCAST_RADIUS: f32 = 500.0;
-    const RADIUS_SQUARED: f32 = BROADCAST_RADIUS * BROADCAST_RADIUS;
-
-    for (id, addr, player_transform) in client_addresses.iter() {
-        let player_pos = player_transform.translation;
-        
-        let mut nearby: Vec<EntityPackage> = transform_query
-            .iter()
-            .filter_map(|(entity, transform)| {
-                let distance_squared = player_pos.distance_squared(transform.translation);
-                
-                if distance_squared <= RADIUS_SQUARED {
-                    let net_id = net_id_map.0.get(&entity)?;
-                    Some(EntityPackage {
-                        net_id: *net_id,
-                        components: vec![NetComponent::Transform {
-                            translation: transform.translation.into(),
-                            rotation: Rotation2d(0.),
-                            scale: Vec3::ONE.into()
-                        }],
-                    })
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        for chonky in nearby.chunks(10) {
-            let message = ServerMessage::UpdateEntities(chonky.to_vec());
             outgoing_sender.0.send((addr.addr, message));
         }
     }
