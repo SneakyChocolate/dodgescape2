@@ -177,6 +177,7 @@ pub enum Layer {
 #[derive(Encode, Decode, Debug, Clone)]
 pub enum NetComponent {
 	LinearVelocity(MyVec2),
+	Velocity(MyVec2),
 	Transform {
 		translation: MyVec3,
 		rotation: Rotation2d,
@@ -238,6 +239,11 @@ impl Into<NetComponent> for Radius {
     	NetComponent::Radius(self.0)
     }
 }
+impl Into<NetComponent> for Velocity {
+    fn into(self) -> NetComponent {
+    	NetComponent::Velocity(self.0.into())
+    }
+}
 
 
 impl NetComponent {
@@ -276,6 +282,34 @@ impl NetComponent {
             NetComponent::Radius(v) => {
                 entity.insert(Radius(*v));
             },
+            NetComponent::Velocity(v) => {
+                entity.insert(Velocity((*v).into()));
+            },
         }
     }
 }
+
+pub fn apply_velocity_system(
+    time: Res<Time>,
+    query: Query<(&mut Transform, &Velocity)>,
+) {
+    let d = time.delta_secs();
+    for (mut transform, velocity) in query {
+        transform.translation += velocity.0.extend(0.) * d;
+    }
+}
+
+pub fn enemy_kill_system(
+    players: Query<(&mut Alive, &Transform, &Radius), With<Player>>,
+    enemies: Query<(&Transform, &Radius), With<Enemy>>,
+) {
+    for (mut player_alive, player_pos, player_radius) in players {
+        for (enemy_pos, enemy_radius) in enemies {
+            let distance = player_pos.translation.distance(enemy_pos.translation);
+            if distance - player_radius.0 - enemy_radius.0 <= 0. {
+                player_alive.0 = false;
+            }
+        }
+    }
+}
+

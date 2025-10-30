@@ -65,15 +65,16 @@ fn main() {
         .insert_resource(EntityMap::default())
         .insert_resource(NetIDMap::default())
         .add_plugins(DefaultPlugins)
-        .add_plugins(PhysicsPlugins::default())
+        // .add_plugins(PhysicsPlugins::default())
         .add_systems(Startup, (setup, spawn_enemies))
         .add_systems(Update, (
             receive_messages,
-            // apply_velocity_system,
+            apply_velocity_system,
             enemy_kill_system,
             broadcast_transform_updates,
             broadcast_enemy_spawns,
-            broadcast_player_spawns))
+            broadcast_player_spawns,
+        ))
         .run();
 }
 
@@ -102,7 +103,7 @@ fn receive_messages(
     mut id_counter: ResMut<IDCounter>,
     mut net_id_map: ResMut<NetIDMap>,
     mut entity_map: ResMut<EntityMap>,
-    mut player_query: Query<&mut LinearVelocity, With<Player>>,
+    mut player_query: Query<&mut Velocity, With<Player>>,
 ) {
     while let Ok((addr, client_message)) = incoming_receiver.0.try_recv() {
         match client_message {
@@ -113,8 +114,7 @@ fn receive_messages(
                     Player,
                     Alive(true),
                     Radius(20.),
-                    LinearVelocity(Vec2::new(-200., 0.)),
-                    RigidBody::Dynamic,
+                    Velocity(Vec2::new(-200., 0.)),
                     Mesh2d(meshes.add(Circle::new(20.))),
                     MeshMaterial2d(materials.add(Color::srgb(0., 1., 0.))),
                     UpdateAddress {addr},
@@ -156,7 +156,7 @@ fn broadcast_player_spawns(
     mut net_id_map: ResMut<NetIDMap>,
     mut entity_map: ResMut<EntityMap>,
     client_addresses: Query<(Entity, &UpdateAddress), With<PendingSpawn>>,
-    player_query: Query<(Entity, &Transform, &Mesh2d, &LinearVelocity, &MeshMaterial2d<ColorMaterial>, &Player, &Alive, &Radius)>,
+    player_query: Query<(Entity, &Transform, &Mesh2d, &Velocity, &MeshMaterial2d<ColorMaterial>, &Player, &Alive, &Radius)>,
 ) {
     for (id, addr) in client_addresses.iter() {
         let mut entity_packages = Vec::<EntityPackage>::new();
@@ -415,26 +415,3 @@ fn spawn_enemies(
     }
 }
 
-// fn apply_velocity_system(
-//     time: Res<Time>,
-//     query: Query<(&mut Transform, &Velocity)>,
-// ) {
-//     let d = time.delta_secs();
-//     for (mut transform, velocity) in query {
-//         transform.translation += velocity.0.extend(0.) * d;
-//     }
-// }
-
-fn enemy_kill_system(
-    players: Query<(&mut Alive, &Transform, &Radius), With<Player>>,
-    enemies: Query<(&Transform, &Radius), With<Enemy>>,
-) {
-    for (mut player_alive, player_pos, player_radius) in players {
-        for (enemy_pos, enemy_radius) in enemies {
-            let distance = player_pos.translation.distance(enemy_pos.translation);
-            if distance - player_radius.0 - enemy_radius.0 <= 0. {
-                player_alive.0 = false;
-            }
-        }
-    }
-}
