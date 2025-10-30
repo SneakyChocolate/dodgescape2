@@ -385,8 +385,8 @@ fn spawn_enemies(
         ));
     }
 
-    for _ in 0..500 {
-        let velocity = LinearVelocity(random_velocity());
+    for _ in 0..1000 {
+        let velocity = LinearVelocity(random_velocity(200., 800.));
         let position = random_position(2000.);
         let material = MeshMaterial2d(materials.add(Color::srgb(
             rng.random_range(0.0..4.0),
