@@ -90,9 +90,6 @@ struct EntityMap(HashMap<NetIDType, Entity>);
 #[derive(Resource)]
 struct IDCounter(pub NetIDType);
 
-#[derive(Component)]
-struct PendingSpawn;
-
 fn receive_messages(
     incoming_receiver: Res<IncomingReceiver>,
     outgoing_sender: Res<OutgoingSender>,
@@ -118,7 +115,6 @@ fn receive_messages(
                     Mesh2d(meshes.add(Circle::new(20.))),
                     MeshMaterial2d(materials.add(Color::srgb(0., 1., 0.))),
                     UpdateAddress {addr},
-                    PendingSpawn,
                 )).id();
 
                 net_id_map.0.insert(id, id_counter.0);
@@ -310,15 +306,15 @@ fn spawn_enemies(
     }
 }
 
-// fn apply_velocity_system(
-//     time: Res<Time>,
-//     query: Query<(&mut Transform, &Velocity)>,
-// ) {
-//     let d = time.delta_secs();
-//     for (mut transform, velocity) in query {
-//         transform.translation += velocity.0.extend(0.) * d;
-//     }
-// }
+fn apply_velocity_system(
+    time: Res<Time>,
+    query: Query<(&mut Transform, &Velocity)>,
+) {
+    let d = time.delta_secs();
+    for (mut transform, velocity) in query {
+        transform.translation += velocity.0.extend(0.) * d;
+    }
+}
 
 fn enemy_kill_system(
     players: Query<(&mut Alive, &Transform, &Radius), With<Player>>,
