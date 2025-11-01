@@ -67,13 +67,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(PhysicsPlugins::default())
         .add_systems(Startup, (setup, spawn_enemies))
-        .add_systems(Update, (
-            receive_messages,
-            // apply_velocity_system,
-            enemy_kill_system,
-            // broadcast_transform_updates,
-            broadcast_enemies,
-            broadcast_players))
+        .add_systems(Update, (receive_messages, apply_velocity_system, enemy_kill_system, broadcast_enemies, broadcast_players))
         .run();
 }
 

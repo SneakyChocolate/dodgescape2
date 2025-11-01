@@ -54,7 +54,7 @@ fn main() {
             while let Ok((len, addr)) = socket.recv_from(buf) {
                 if let Some(server_message) = ServerMessage::decode(buf) {
                     // incoming_sender.send(server_message);
-                    delay_pool.push((0.0, server_message));
+                    delay_pool.push((0.2, server_message));
                 }
             }
 
